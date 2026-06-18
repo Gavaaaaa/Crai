@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Modelos treinados (regeneraveis via train())
+crai/models/
+
+# Logs de auditoria SHAP (regeneraveis)
+crai/logs/
+
+# Ambiente
+.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pytest
+.pytest_cache/
