@@ -11,10 +11,15 @@ class AgentState(TypedDict):
     amount:         float
     invoice_id:     str
 
-    # Diagnóstico (XGBoost)
+    # Diagnóstico (XGBoost + RF + e-Profit + SHAP)
     failure_cause:        Optional[str]
-    recovery_score:        Optional[float]
-    feature_importance:    Optional[dict]
+    recovery_score:       Optional[int]           # 0-100
+    p_recovery:           Optional[float]          # 0.0-1.0
+    eprofit:              Optional[float]          # R$ — e-Profit da intervenção
+    recommend_action:     Optional[bool]           # True se e-Profit > 0
+    ltv_estimated:        Optional[float]          # LTV estimado do cliente
+    shap_explanation:     Optional[dict]           # Explicação SHAP por feature
+    feature_importance:   Optional[dict]
 
     # Anomalia (Autoencoder)
     is_anomalous:         Optional[bool]

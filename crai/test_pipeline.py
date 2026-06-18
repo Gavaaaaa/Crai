@@ -41,7 +41,9 @@ async def run_involuntary_scenario(name, customer_id, amount, failure_code):
     initial: AgentState = {
         "stripe_event": make_stripe_event(customer_id, amount, failure_code),
         "customer_id": customer_id, "invoice_id": f"inv_{customer_id}", "amount": amount,
-        "failure_cause": None, "recovery_score": None, "feature_importance": None,
+        "failure_cause": None, "recovery_score": None, "p_recovery": None,
+        "eprofit": None, "recommend_action": None, "ltv_estimated": None,
+        "shap_explanation": None, "feature_importance": None,
         "is_anomalous": None, "reconstruction_error": None, "optimal_retry_at": None,
         "confidence": None, "profile_type": None, "retry_count": 0, "next_retry_at": None,
         "retry_exhausted": False, "recovered": False, "dunning_sent": False,

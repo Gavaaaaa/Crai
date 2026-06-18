@@ -1,5 +1,6 @@
 """crai/agent/workflow.py — Nós do pipeline de churn involuntário."""
 
+import numpy as np
 from datetime import datetime
 from .state import AgentState
 from ..ml.failure_classifier import FailureClassifier
@@ -16,21 +17,66 @@ _backoff    = SmartBackoff()
 _dunning    = DunningEngine()
 _hubspot    = HubSpotCRM()
 
+# Tentar carregar modelos treinados; se não existirem, usa heurística
+_classifier.load()
+
 
 async def diagnose_failure(state: AgentState) -> AgentState:
-    features = _extract_features(state["stripe_event"])
-    result = await _classifier.predict(features)
-    print(f"[AGENT] Diagnóstico: {result['cause']} | score: {result['score']:.2f} ({result.get('method')})")
-    return {**state, "failure_cause": result["cause"], "recovery_score": result["score"],
-            "feature_importance": result.get("importance", {})}
+    """Diagnostica causa da falha via ensemble XGBoost+RF com e-Profit e SHAP."""
+    features = _extract_features(state["stripe_event"], state["amount"])
+    result = _classifier.predict(features)
+
+    shap_readable = result["shap_explanation"].get("readable", "")
+    print(f"[AGENT] Diagnóstico ({result['method']}): "
+          f"score {result['recovery_score']}/100 | "
+          f"e-Profit R$ {result['eprofit']:.2f} | "
+          f"ação: {'SIM' if result['recommend_action'] else 'NÃO'}")
+    if shap_readable:
+        print(f"[SHAP]  {shap_readable}")
+
+    return {
+        **state,
+        "failure_cause": features["gateway_error_code"],
+        "recovery_score": result["recovery_score"],
+        "p_recovery": result["p_recovery"],
+        "eprofit": result["eprofit"],
+        "recommend_action": result["recommend_action"],
+        "ltv_estimated": result["ltv_estimated"],
+        "shap_explanation": result["shap_explanation"],
+        "feature_importance": {
+            f["feature"]: f["contribution_pct"]
+            for f in result["shap_explanation"].get("features", [])[:5]
+        },
+    }
 
 
 async def check_anomaly(state: AgentState) -> AgentState:
     result = await _detector.check(state["customer_id"], state["stripe_event"])
-    adjusted = state["recovery_score"] * (0.7 if result["is_anomaly"] else 1.0)
+
+    # Anomalia ajusta o score de recuperação para baixo
+    if result["is_anomaly"]:
+        adjusted_score = max(0, int(state["recovery_score"] * 0.7))
+        adjusted_p = state.get("p_recovery", 0.5) * 0.7
+    else:
+        adjusted_score = state["recovery_score"]
+        adjusted_p = state.get("p_recovery", 0.5)
+
+    # Recalcular e-Profit com score ajustado
+    ltv = state.get("ltv_estimated", state["amount"] * 6)
+    cost = 0.05  # bot_whatsapp padrão
+    new_eprofit = round(float(adjusted_p * ltv - cost), 2)
+
     print(f"[AGENT] Anomalia: {result['is_anomaly']} | erro: {result['error']:.4f}")
-    return {**state, "is_anomalous": result["is_anomaly"], "reconstruction_error": result["error"],
-            "recovery_score": round(adjusted, 3)}
+
+    return {
+        **state,
+        "is_anomalous": result["is_anomaly"],
+        "reconstruction_error": result["error"],
+        "recovery_score": adjusted_score,
+        "p_recovery": round(adjusted_p, 4),
+        "eprofit": new_eprofit,
+        "recommend_action": bool(new_eprofit > 0),
+    }
 
 
 async def infer_payday(state: AgentState) -> AgentState:
@@ -54,27 +100,48 @@ async def schedule_retry(state: AgentState) -> AgentState:
 
 
 async def trigger_dunning(state: AgentState) -> AgentState:
+    p_recovery = state.get("p_recovery", state.get("recovery_score", 50) / 100)
     result = await _dunning.run_campaign(state["customer_id"], state["failure_cause"],
-                                          state["recovery_score"], state["amount"])
+                                          p_recovery, state["amount"])
     return {**state, "dunning_sent": result["sent"], "channel": result["channel"], "message_sent": result["message"]}
 
 
 async def update_roi_dashboard(state: AgentState) -> AgentState:
     fee = state["amount"] * 0.15 if state.get("recovered") else 0
-    print(f"[ROI] {'✅' if state.get('recovered') else '❌'} R$ {state['amount']:.2f} | taxa R$ {fee:.2f}")
+    eprofit = state.get("eprofit", 0)
+    recovered_icon = "[OK]" if state.get("recovered") else "[X]"
+    print(f"[ROI] {recovered_icon} R$ {state['amount']:.2f} | taxa R$ {fee:.2f} | e-Profit R$ {eprofit:.2f}")
     crm_result = await _hubspot.register_recovery_cycle(state)
     print(f"[HUBSPOT] Contact {crm_result['hubspot_contact_id']} | Deal {crm_result['hubspot_deal_id']} | {crm_result['stage']}\n")
     return state
 
 
-def _extract_features(event: dict) -> dict:
+def _extract_features(event: dict, amount: float) -> dict:
+    """Extrai as 11 features + LTV para o novo classificador."""
     charge = event.get("data", {}).get("object", {})
     now = datetime.now()
+
+    # Simular tenure e histórico (em produção viriam do banco/CRM)
+    rng = np.random.default_rng(seed=abs(hash(charge.get("customer", ""))) % (2**32))
+    tenure = int(rng.exponential(scale=12))
+    payment_history = round(float(np.clip(rng.beta(5, 2), 0, 1)), 3)
+    failure_count = int(rng.poisson(1.5))
+
+    invoice_amount = charge.get("amount", 0) / 100 if charge.get("amount", 0) > 100 else amount
+    avg_ticket = round(invoice_amount * rng.uniform(0.9, 1.1), 2)
+    ltv = round(max(invoice_amount, tenure * avg_ticket * 0.9 / 12), 2)
+
     return {
-        "error_code":   charge.get("failure_code"),
-        "amount":       charge.get("amount", 0) / 100,
-        "hour_of_day":  now.hour,
-        "day_of_week":  now.weekday(),
-        "card_brand":   (charge.get("payment_method_details") or {}).get("brand"),
-        "decline_code": charge.get("failure_message"),
+        "gateway_error_code": charge.get("failure_code") or "processing_error",
+        "card_brand": (charge.get("payment_method_details") or {}).get("brand") or "visa",
+        "tenure_months": tenure,
+        "day_of_month": now.day,
+        "invoice_amount": invoice_amount,
+        "avg_ticket": avg_ticket,
+        "payment_history_score": payment_history,
+        "failure_count_90d": failure_count,
+        "hour_of_day": now.hour,
+        "day_of_week": now.weekday(),
+        "attempt_count": charge.get("attempt_count", 1),
+        "ltv_estimated": ltv,
     }

@@ -10,8 +10,16 @@ from .workflow import (
 
 
 def route_after_diagnosis(state: AgentState) -> str:
-    if state.get("recovery_score", 0) < 0.15:
-        print(f"[ROUTER] Score baixo — abortando")
+    """Decide se vale a pena continuar com base no e-Profit."""
+    eprofit = state.get("eprofit", 0)
+    recommend = state.get("recommend_action", True)
+    score = state.get("recovery_score", 0)
+
+    if not recommend or eprofit <= 0:
+        print(f"[ROUTER] e-Profit R$ {eprofit:.2f} <= 0 -- abortando (nao vale intervir)")
+        return "update_dashboard"
+    if score < 5:
+        print(f"[ROUTER] Score {score}/100 muito baixo -- abortando")
         return "update_dashboard"
     return "check_anomaly"
 
