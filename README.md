@@ -139,10 +139,15 @@ Pipeline de treino, avaliação e figuras para a banca em [`modulo_02_autoencode
 
 ### 3. Payday Inference (`ml/payday_inference.py`)
 
-**LSTM + Prophet** para inferência de liquidez.
-- Prediz quando cada cliente terá saldo para pagar
-- Sazonalidade brasileira: 5º dia útil, dia 10, 15, 30
-- Output: probabilidade de sucesso de retry por dia
+**LSTM + Prophet** para inferência de liquidez — prediz **quando** o cliente terá saldo para a retentativa.
+
+- **LSTM** (64 unid., 2 camadas): janela de 30 dias de saldo do cliente → probabilidade de liquidez nos 14 dias seguintes (seq2vec)
+- **Prophet por perfil** (CLT/PJ/freelancer): prior da sazonalidade brasileira — 5º dia útil, dias 10, 15, 20 e 30
+- **Ensemble 0.6/0.4**: janela ótima = primeiro dia com P(liquidez) ≥ 0.5
+
+**Outputs:** data ótima de retry + confiança + perfil inferido (84% de acurácia via âncoras de payday).
+
+Pipeline de treino e relatório em [`modulo_03_payday/`](modulo_03_payday/). Métricas: MAE de **0,62 dia** vs 5,01 da heurística de dias fixos; acerto da janela com ±1 dia em **89,3%** dos casos (ROC-AUC diário 0.97).
 
 ### 4. Offer Selector (`churn_voluntary/offer_bandit.py`)
 
@@ -326,7 +331,12 @@ O sistema só recomenda intervenção quando `e-Profit > 0`, ou seja, quando o r
   - [x] Threshold calibrado no percentil 95 (ROC-AUC 0.996, recall 97,4%)
   - [x] Explicabilidade: quebra do erro de reconstrução por feature
   - [x] Integração ao pipeline LangGraph com fallback heurístico
-- [ ] **Módulo 3** — LSTM + Prophet (payday_inference.py)
+- [x] **Módulo 3** — LSTM + Prophet (payday_inference.py)
+  - [x] Séries de liquidez sintéticas (600 clientes × 180 dias, 3 perfis BR)
+  - [x] LiquidityLSTM seq2vec (30 dias → 14 dias) com split por cliente
+  - [x] Prophet por perfil com sazonalidade mensal (payday brasileiro)
+  - [x] Ensemble 0.6/0.4 — MAE 0,62 dia vs 5,01 da heurística (hit ±1d: 89%)
+  - [x] Integração ao pipeline LangGraph com fallback heurístico
 - [ ] **Módulo 4** — Thompson Sampling (offer_selector.py)
 - [ ] **Módulo 5** — LangGraph + LLM (agent/ + dunning/)
 - [ ] **Módulo 6** — Demo para banca (demo_reasoning.py)

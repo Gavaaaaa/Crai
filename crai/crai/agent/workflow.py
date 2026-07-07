@@ -20,6 +20,7 @@ _hubspot    = HubSpotCRM()
 # Tentar carregar modelos treinados; se não existirem, usa heurística
 _classifier.load()
 _detector.load()
+_payday.load()
 
 
 async def diagnose_failure(state: AgentState) -> AgentState:
@@ -89,7 +90,9 @@ async def infer_payday(state: AgentState) -> AgentState:
     if state["failure_cause"] != "insufficient_funds":
         return {**state, "optimal_retry_at": None}
     window = await _payday.predict_next_window(state["customer_id"])
-    print(f"[AGENT] Payday: {window['timestamp'].strftime('%d/%m %H:%M')} | perfil: {window['profile']}")
+    print(f"[AGENT] Payday ({window.get('method', 'heuristic')}): "
+          f"{window['timestamp'].strftime('%d/%m %H:%M')} | perfil: {window['profile']} | "
+          f"confiança: {window['confidence']:.0%}")
     return {**state, "optimal_retry_at": window["timestamp"], "confidence": window["confidence"],
             "profile_type": window["profile"]}
 
