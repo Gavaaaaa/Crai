@@ -19,6 +19,7 @@ _hubspot    = HubSpotCRM()
 
 # Tentar carregar modelos treinados; se não existirem, usa heurística
 _classifier.load()
+_detector.load()
 
 
 async def diagnose_failure(state: AgentState) -> AgentState:
@@ -66,12 +67,17 @@ async def check_anomaly(state: AgentState) -> AgentState:
     cost = 0.05  # bot_whatsapp padrão
     new_eprofit = round(float(adjusted_p * ltv - cost), 2)
 
-    print(f"[AGENT] Anomalia: {result['is_anomaly']} | erro: {result['error']:.4f}")
+    print(f"[AGENT] Anomalia ({result['method']}): {result['is_anomaly']} | "
+          f"erro: {result['error']:.4f} | threshold: {result['threshold']:.4f}")
+    if result["is_anomaly"] and result.get("top_features"):
+        top = ", ".join(f["feature"] for f in result["top_features"])
+        print(f"[AGENT] Features anômalas: {top}")
 
     return {
         **state,
         "is_anomalous": result["is_anomaly"],
         "reconstruction_error": result["error"],
+        "anomaly_explanation": result.get("top_features", []),
         "recovery_score": adjusted_score,
         "p_recovery": round(adjusted_p, 4),
         "eprofit": new_eprofit,

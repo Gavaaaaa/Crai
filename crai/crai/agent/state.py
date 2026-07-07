@@ -24,6 +24,7 @@ class AgentState(TypedDict):
     # Anomalia (Autoencoder)
     is_anomalous:         Optional[bool]
     reconstruction_error: Optional[float]
+    anomaly_explanation:  Optional[list]           # Top features por erro de reconstrução
 
     # Liquidez (LSTM + Prophet)
     optimal_retry_at: Optional[datetime]

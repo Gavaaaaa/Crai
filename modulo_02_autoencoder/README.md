@@ -25,6 +25,8 @@ python -m src.evaluate
 python -m src.visualizar
 python -m src.anomaly_detector   # demo
 python -m tests.test_autoencoder # testes
+
+python -m src.export_to_crai     # exporta artefatos para crai/models/
 ```
 
 ## Resultados (seed 42)

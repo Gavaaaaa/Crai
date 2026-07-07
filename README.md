@@ -126,10 +126,16 @@ insufficient_funds (-20.3%) | Falhas (90 dias) 0 (+14.0%)
 
 ### 2. Anomaly Detector (`ml/anomaly_detector.py`)
 
-Autoencoder em **PyTorch** para detecção de anomalias não supervisionada.
-- Input: padrões de uso/pagamento
-- Output: anomaly score (0-1) + reconstrução por feature
-- Identifica quais dimensões do comportamento são anômalas
+Autoencoder denso em **PyTorch** (12→32→16→4→16→32→12) treinado **apenas em clientes saudáveis** — o erro de reconstrução funciona como score de anomalia não supervisionado.
+
+**Features (12):** tenure, MRR, seats, logins 7d/30d, adoção de features, duração média de sessão, chamadas de API, dias desde o último login, tickets, falhas de pagamento 90d, NPS.
+
+**Outputs:**
+- Erro de reconstrução (score de anomalia) + flag binária via threshold no percentil 95 dos saudáveis
+- Top features que mais contribuem para o erro (explicabilidade)
+- Anomalia reduz `p_recovery` em 30% e recalcula o e-Profit downstream
+
+Pipeline de treino, avaliação e figuras para a banca em [`modulo_02_autoencoder/`](modulo_02_autoencoder/). Métricas: ROC-AUC **0.996**, recall **97,4%** @ p95, separação saudáveis vs anômalos de **11,6x**.
 
 ### 3. Payday Inference (`ml/payday_inference.py`)
 
@@ -314,7 +320,12 @@ O sistema só recomenda intervenção quando `e-Profit > 0`, ou seja, quando o r
   - [x] Métrica e-Profit como critério de decisão
   - [x] SHAP TreeExplainer com logs JSON de auditoria
   - [x] 26 testes unitários (pytest)
-- [ ] **Módulo 2** — Autoencoder PyTorch (anomaly_detector.py)
+- [x] **Módulo 2** — Autoencoder PyTorch (anomaly_detector.py)
+  - [x] Dataset comportamental sintético (5000 saudáveis + 500 anômalos)
+  - [x] Autoencoder denso 12→4→12 com early stopping (treino só em saudáveis)
+  - [x] Threshold calibrado no percentil 95 (ROC-AUC 0.996, recall 97,4%)
+  - [x] Explicabilidade: quebra do erro de reconstrução por feature
+  - [x] Integração ao pipeline LangGraph com fallback heurístico
 - [ ] **Módulo 3** — LSTM + Prophet (payday_inference.py)
 - [ ] **Módulo 4** — Thompson Sampling (offer_selector.py)
 - [ ] **Módulo 5** — LangGraph + LLM (agent/ + dunning/)
