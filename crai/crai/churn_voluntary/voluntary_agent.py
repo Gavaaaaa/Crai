@@ -20,6 +20,7 @@ from ..integrations.hubspot_crm import HubSpotCRM
 
 claude   = AsyncAnthropic()
 _bandit  = OfferBandit()
+_bandit.load()  # warm start dos posteriores simulados; senão, priors de benchmark
 _hubspot = HubSpotCRM()
 
 # Histórico simples de qual canal converteu por cliente (cold start em memória)
@@ -30,6 +31,7 @@ OFFER_LABELS = {
     "desconto_20": "20% de desconto por 3 meses",
     "pausa_1_mes": "pausar a assinatura por 1 mês sem custo",
     "consulta_cs": "uma conversa com nosso time de sucesso do cliente",
+    "pix_boleto_flash": "trocar para pagamento via Pix ou boleto em 1 clique",
 }
 
 
@@ -43,8 +45,11 @@ async def assess_risk(state: ChurnVoluntaryState) -> ChurnVoluntaryState:
 
 
 async def choose_offer(state: ChurnVoluntaryState) -> ChurnVoluntaryState:
-    offer = _bandit.choose_offer(state["profile"], state["risk_score"])
-    print(f"[CHURN-VOL] Oferta escolhida (Multi-Armed Bandit): {offer}")
+    mrr = state["props"].get("mrr")  # quando o evento Segment traz o plano
+    offer = _bandit.choose_offer(state["profile"], state["risk_score"], mrr=mrr)
+    p_estimado = _bandit.conversion_rates(state["profile"]).get(offer, 0.0)
+    print(f"[CHURN-VOL] Oferta escolhida (Thompson Sampling): {offer} "
+          f"| P(aceite) posterior: {p_estimado:.1%}")
     return {**state, "offer_type": offer}
 
 

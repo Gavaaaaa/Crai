@@ -151,10 +151,14 @@ Pipeline de treino e relatório em [`modulo_03_payday/`](modulo_03_payday/). Mé
 
 ### 4. Offer Selector (`churn_voluntary/offer_bandit.py`)
 
-**Thompson Sampling** (Multi-Armed Bandit) para seleção de ofertas.
-- 5 braços: desconto 10%, upgrade, ligação CS, e-mail educacional, Pix/Boleto Flash
-- Aprende por segmento (CLT/PJ/freelancer)
-- Custo de cada braço integrado ao cálculo de e-Profit
+**Thompson Sampling** (Multi-Armed Bandit Beta-Bernoulli) para seleção de ofertas de retenção.
+
+- 5 braços: desconto 10%, desconto 20%, pausa 1 mês, consulta CS, Pix/Boleto Flash
+- Um posterior Beta(α,β) por par (perfil, oferta) — a exploração decai sozinha, sem epsilon
+- **Otimiza e-Profit, não conversão**: `argmax p_amostrado × LTV_retido − custo(oferta)` — no CLT, a consulta CS converte mais (50%) mas perde para o desconto de 10% por causa do custo humano
+- Aprendizado contínuo: cada aceite/recusa real atualiza o posterior e persiste em disco
+
+Simulação, relatório e figuras em [`modulo_04_offer_bandit/`](modulo_04_offer_bandit/). Em 6.000 rodadas: **+R$199 mil** vs o epsilon-greedy anterior, regret 40% menor, 87% de escolhas ótimas ao final.
 
 ### 5. Agente LangGraph (`agent/` + `dunning/`)
 
@@ -337,7 +341,12 @@ O sistema só recomenda intervenção quando `e-Profit > 0`, ou seja, quando o r
   - [x] Prophet por perfil com sazonalidade mensal (payday brasileiro)
   - [x] Ensemble 0.6/0.4 — MAE 0,62 dia vs 5,01 da heurística (hit ±1d: 89%)
   - [x] Integração ao pipeline LangGraph com fallback heurístico
-- [ ] **Módulo 4** — Thompson Sampling (offer_selector.py)
+- [x] **Módulo 4** — Thompson Sampling (offer_selector.py)
+  - [x] Ambiente simulado com verdade oculta (aceites por perfil × oferta, MRR lognormal)
+  - [x] Beta-Bernoulli otimizando e-Profit (não conversão) com custo por braço
+  - [x] Comparação pareada: +R$199k vs epsilon-greedy, 87% de escolhas ótimas
+  - [x] Persistência dos posteriores (aprendizado contínuo sobrevive a restarts)
+  - [x] Integração ao agente voluntário com warm start e 5º braço (Pix/Boleto)
 - [ ] **Módulo 5** — LangGraph + LLM (agent/ + dunning/)
 - [ ] **Módulo 6** — Demo para banca (demo_reasoning.py)
 
