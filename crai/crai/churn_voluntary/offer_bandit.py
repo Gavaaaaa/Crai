@@ -1,73 +1,122 @@
+"""crai/churn_voluntary/offer_bandit.py — Módulo 4: Thompson Sampling (MAB).
+
+Cada par (perfil, oferta) mantém um posterior Beta(α, β) sobre a taxa de
+aceite. A cada decisão o bandit AMOSTRA uma taxa de cada posterior e escolhe
+a oferta que maximiza o e-Profit com a taxa amostrada:
+
+    escolha = argmax_o  p_amostrado(o) × LTV_retido − custo(o)
+
+A incerteza faz a exploração sozinha: braços pouco testados têm posteriores
+largos e às vezes amostram alto; braços ruins saem de cena. Não há epsilon
+para calibrar. O aprendizado é contínuo: cada aceite/recusa real atualiza o
+posterior e é persistido em crai/models/bandit_state.json.
+
+Warm start: posteriores da simulação de 6.000 rodadas do modulo_04_offer_bandit/.
+Cold start (sem arquivo): priors de benchmarks de mercado.
 """
-crai/churn_voluntary/offer_bandit.py
-Multi-Armed Bandit (Epsilon-Greedy) — aprende qual oferta converte melhor
-por perfil de cliente, sem precisar de regras programadas manualmente.
 
-Cada "braço" do bandit é uma oferta. O algoritmo testa todas no início
-(exploração) e progressivamente passa a usar a que mais converte
-(explotação), por perfil (CLT / PJ / freelancer).
-"""
+import json
+from pathlib import Path
 
-import random
-from collections import defaultdict
+import numpy as np
 
-OFFERS = ["desconto_10", "desconto_20", "pausa_1_mes", "consulta_cs"]
+# ── Diretório de persistência (mesmo padrão dos módulos 1-3) ─────────────
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+MODELS_DIR = BASE_DIR / "models"
+STATE_PATH = MODELS_DIR / "bandit_state.json"
+
+OFFERS = ["desconto_10", "desconto_20", "pausa_1_mes", "consulta_cs", "pix_boleto_flash"]
+PROFILES = ["CLT", "PJ", "freelancer"]
+
+MESES_LTV_RETIDO = 6          # valor retido em caso de aceite (consistente com o Módulo 1)
+MRR_TIPICO = {"CLT": 300.0, "PJ": 550.0, "freelancer": 220.0, "default": 350.0}
+
+# Priors de cold start (benchmarks de mercado), em pseudo-observações (aceites, recusas)
+SEED_PRIORS = {
+    "CLT":        {"desconto_10": (9, 11),  "desconto_20": (14, 6), "pausa_1_mes": (8, 12),
+                   "consulta_cs": (7, 3),   "pix_boleto_flash": (2, 8)},
+    "PJ":         {"desconto_10": (5, 10),  "desconto_20": (8, 7),  "pausa_1_mes": (13, 7),
+                   "consulta_cs": (11, 4),  "pix_boleto_flash": (3, 7)},
+    "freelancer": {"desconto_10": (9, 11),  "desconto_20": (9, 11), "pausa_1_mes": (6, 9),
+                   "consulta_cs": (6, 4),   "pix_boleto_flash": (5, 5)},
+}
+
+
+def offer_cost(offer: str, mrr: float) -> float:
+    """Custo da intervenção em R$ (descontos custam % do MRR por 3 meses)."""
+    return {
+        "desconto_10": 0.10 * 3 * mrr,
+        "desconto_20": 0.20 * 3 * mrr,
+        "pausa_1_mes": 1.0 * mrr,
+        "consulta_cs": 250.0,
+        "pix_boleto_flash": 2.0,
+    }[offer]
 
 
 class OfferBandit:
-    """
-    Epsilon-Greedy Multi-Armed Bandit.
+    """Thompson Sampling (Beta-Bernoulli) otimizando e-Profit por perfil."""
 
-    epsilon = probabilidade de explorar (testar oferta aleatória)
-    Com o tempo, baixamos epsilon para favorecer a oferta vencedora.
-    """
-
-    def __init__(self, epsilon: float = 0.2):
-        self.epsilon = epsilon
-        # stats[profile][offer] = {"shown": int, "accepted": int}
-        self.stats = defaultdict(lambda: {o: {"shown": 0, "accepted": 0} for o in OFFERS})
-
-        # Priors realistas para cold start (baseados em benchmarks de mercado)
-        self._seed_priors()
-
-    def _seed_priors(self):
-        priors = {
-            "CLT":        {"desconto_10": (20, 9),  "desconto_20": (20, 14), "pausa_1_mes": (20, 8),  "consulta_cs": (10, 7)},
-            "PJ":         {"desconto_10": (15, 5),  "desconto_20": (15, 8),  "pausa_1_mes": (20, 13), "consulta_cs": (15, 11)},
-            "freelancer": {"desconto_10": (20, 9),  "desconto_20": (20, 9),  "pausa_1_mes": (15, 6),  "consulta_cs": (10, 6)},
+    def __init__(self, seed: int = 42):
+        self.rng = np.random.default_rng(seed)
+        self.is_fitted = False
+        self.state = {
+            p: {o: {"alpha": 1.0 + a, "beta": 1.0 + b} for o, (a, b) in SEED_PRIORS[p].items()}
+            for p in PROFILES
         }
-        for profile, offers in priors.items():
-            for offer, (shown, accepted) in offers.items():
-                self.stats[profile][offer] = {"shown": shown, "accepted": accepted}
 
-    def choose_offer(self, profile: str, risk_score: float) -> str:
-        """
-        Escolhe a oferta. Risco muito alto (>=0.90) pula direto para
-        consulta_cs — intervenção humana é a única aposta segura.
-        """
+    # ── Carregamento do warm start ───────────────────────────────────────
+    def load(self) -> bool:
+        """Carrega posteriores aprendidos de crai/models/bandit_state.json."""
+        try:
+            with open(STATE_PATH, encoding="utf-8") as f:
+                self.state = json.load(f)
+            self.is_fitted = True
+            n_obs = sum(s["alpha"] + s["beta"] - 2 for p in self.state.values() for s in p.values())
+            print(f"[BANDIT] Posteriores carregados de {STATE_PATH} ({n_obs:.0f} observações)")
+            return True
+        except FileNotFoundError:
+            print("[BANDIT] Estado não encontrado — usando priors de benchmark (cold start)")
+            return False
+        except Exception as e:
+            print(f"[BANDIT] Erro ao carregar estado: {e}")
+            return False
+
+    # ── Interface consumida pelo agente (Módulo 5) ───────────────────────
+    def choose_offer(self, profile: str, risk_score: float, mrr: float | None = None) -> str:
+        """Risco crítico (>= 0.90) escala direto para humano; senão, Thompson."""
         if risk_score >= 0.90:
             return "consulta_cs"
 
-        if random.random() < self.epsilon:
-            return random.choice(OFFERS)  # exploração
+        if mrr is None:
+            mrr = MRR_TIPICO.get(profile, MRR_TIPICO["default"])
+        ltv_retido = MESES_LTV_RETIDO * mrr
 
-        # explotação: escolhe a de maior taxa de conversão histórica
-        profile_stats = self.stats[profile]
-        best_offer = max(
-            profile_stats,
-            key=lambda o: profile_stats[o]["accepted"] / max(profile_stats[o]["shown"], 1)
-        )
-        return best_offer
+        perfil = self.state.get(profile, self.state["CLT"])
+        amostras = {o: self.rng.beta(s["alpha"], s["beta"]) for o, s in perfil.items()}
+        return max(amostras, key=lambda o: amostras[o] * ltv_retido - offer_cost(o, mrr))
 
     def record_outcome(self, profile: str, offer: str, accepted: bool):
-        """Atualiza as estatísticas após saber se o cliente aceitou."""
-        self.stats[profile][offer]["shown"] += 1
+        """Atualiza o posterior após saber se o cliente aceitou e persiste."""
+        s = self.state.setdefault(profile, {o: {"alpha": 1.0, "beta": 1.0} for o in OFFERS})
+        s = s.setdefault(offer, {"alpha": 1.0, "beta": 1.0})
         if accepted:
-            self.stats[profile][offer]["accepted"] += 1
+            s["alpha"] += 1.0
+        else:
+            s["beta"] += 1.0
+        self._persist()
 
     def conversion_rates(self, profile: str) -> dict:
-        """Retorna taxa de conversão atual de cada oferta para um perfil."""
+        """Média do posterior por oferta para um perfil."""
+        perfil = self.state.get(profile, self.state["CLT"])
         return {
-            o: round(s["accepted"] / max(s["shown"], 1), 3)
-            for o, s in self.stats[profile].items()
+            o: round(s["alpha"] / (s["alpha"] + s["beta"]), 3)
+            for o, s in perfil.items()
         }
+
+    def _persist(self):
+        try:
+            MODELS_DIR.mkdir(parents=True, exist_ok=True)
+            with open(STATE_PATH, "w", encoding="utf-8") as f:
+                json.dump(self.state, f, indent=2, ensure_ascii=False)
+        except OSError as e:
+            print(f"[BANDIT] Falha ao persistir estado: {e}")
