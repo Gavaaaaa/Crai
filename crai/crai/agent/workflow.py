@@ -3,6 +3,7 @@
 import numpy as np
 from datetime import datetime
 from .state import AgentState
+from .decision_policy import DecisionPolicy
 from ..ml.failure_classifier import FailureClassifier
 from ..ml.anomaly_detector import AnomalyDetector
 from ..ml.payday_inference import PaydayInference
@@ -16,11 +17,13 @@ _payday     = PaydayInference()
 _backoff    = SmartBackoff()
 _dunning    = DunningEngine()
 _hubspot    = HubSpotCRM()
+_policy     = DecisionPolicy()
 
 # Tentar carregar modelos treinados; se não existirem, usa heurística
 _classifier.load()
 _detector.load()
 _payday.load()
+_policy.load()
 
 
 async def diagnose_failure(state: AgentState) -> AgentState:
@@ -97,6 +100,41 @@ async def infer_payday(state: AgentState) -> AgentState:
             "profile_type": window["profile"]}
 
 
+async def decide_action(state: AgentState) -> AgentState:
+    """Módulo 5 — escolhe a próxima ação maximizando e-Profit e loga o porquê.
+
+    Retentar não resolve todas as causas: um cartão expirado nunca passa numa
+    retentativa, por mais que se tente. É essa assimetria que a política
+    explora, e é ela que separa o CRAI da regra fixa de mercado.
+    """
+    optimal_retry = state.get("optimal_retry_at")
+    dias_ate_payday = 0
+    if optimal_retry is not None:
+        dias_ate_payday = max(0, (optimal_retry - datetime.now()).days)
+
+    decisao = _policy.decidir(
+        {
+            "causa": state["failure_cause"],
+            "valor": state["amount"],
+            "p_recovery": state.get("p_recovery", 0.5),
+            "payday_previsto": dias_ate_payday,
+        },
+        ja_tentou_retry=state.get("retry_count", 0) > 0,
+    )
+
+    print(f"[AGENT] Decisão: {decisao['acao']} (dia +{decisao['dia_offset']}) | "
+          f"e-Profit esperado R$ {decisao['eprofit_esperado']:.2f}")
+    print(f"[RACIOCÍNIO] {decisao['motivo']}")
+
+    return {
+        **state,
+        "acao_decidida": decisao["acao"],
+        "acao_motivo": decisao["motivo"],
+        "acao_eprofit": decisao["eprofit_esperado"],
+        "escalar_humano": decisao["escalar_humano"],
+    }
+
+
 async def schedule_retry(state: AgentState) -> AgentState:
     attempt = state.get("retry_count", 0)
     result = _backoff.get_schedule(state["failure_cause"], attempt, state.get("optimal_retry_at"))
@@ -110,8 +148,11 @@ async def schedule_retry(state: AgentState) -> AgentState:
 
 async def trigger_dunning(state: AgentState) -> AgentState:
     p_recovery = state.get("p_recovery", state.get("recovery_score", 50) / 100)
+    canal = state.get("acao_decidida") or "whatsapp"
+    if canal in ("retry", "nao_intervir"):
+        canal = "whatsapp"          # retentativas esgotadas: contatar o cliente
     result = await _dunning.run_campaign(state["customer_id"], state["failure_cause"],
-                                          p_recovery, state["amount"])
+                                          p_recovery, state["amount"], canal=canal)
     return {**state, "dunning_sent": result["sent"], "channel": result["channel"], "message_sent": result["message"]}
 
 

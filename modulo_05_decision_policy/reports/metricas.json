@@ -1,0 +1,95 @@
+{
+  "n_cobrancas": 5000,
+  "volume_total_em_risco": 2102362.8,
+  "por_politica": {
+    "crai_eprofit": {
+      "receita": 1683074.18,
+      "custo": 4637.3,
+      "liquido": 1678436.88,
+      "taxa_recuperacao": 0.7992,
+      "acoes_por_cobranca": 1.7774,
+      "retries_desperdicados": 188,
+      "ligacoes": 54
+    },
+    "oraculo": {
+      "receita": 1717009.24,
+      "custo": 4417.9,
+      "liquido": 1712591.34,
+      "taxa_recuperacao": 0.815,
+      "acoes_por_cobranca": 1.6974,
+      "retries_desperdicados": 104,
+      "ligacoes": 52
+    },
+    "regra_fixa": {
+      "receita": 1030930.15,
+      "custo": 310.78,
+      "liquido": 1030619.37,
+      "taxa_recuperacao": 0.4866,
+      "acoes_por_cobranca": 3.1078,
+      "retries_desperdicados": 7701,
+      "ligacoes": 0
+    },
+    "sempre_ligacao": {
+      "receita": 1212731.42,
+      "custo": 8058.85,
+      "liquido": 1204672.57,
+      "taxa_recuperacao": 0.5748,
+      "acoes_por_cobranca": 2.3354,
+      "retries_desperdicados": 0,
+      "ligacoes": 500
+    }
+  },
+  "ganho_crai_vs_regra_fixa": 647817.51,
+  "ganho_pct": 62.86,
+  "ganho_por_cobranca": 129.56,
+  "pct_do_teto_do_oraculo": 98.01,
+  "recuperacao_por_causa": {
+    "card_declined": {
+      "crai_eprofit": 0.6317,
+      "oraculo": 0.6317,
+      "regra_fixa": 0.4571,
+      "sempre_ligacao": 0.5633
+    },
+    "do_not_honor": {
+      "crai_eprofit": 0.4465,
+      "oraculo": 0.4465,
+      "regra_fixa": 0.2156,
+      "sempre_ligacao": 0.3905
+    },
+    "expired_card": {
+      "crai_eprofit": 0.8785,
+      "oraculo": 0.8785,
+      "regra_fixa": 0.2239,
+      "sempre_ligacao": 0.8057
+    },
+    "generic_decline": {
+      "crai_eprofit": 0.6979,
+      "oraculo": 0.7005,
+      "regra_fixa": 0.6536,
+      "sempre_ligacao": 0.6224
+    },
+    "insufficient_funds": {
+      "crai_eprofit": 0.9052,
+      "oraculo": 0.9487,
+      "regra_fixa": 0.5605,
+      "sempre_ligacao": 0.4216
+    },
+    "processing_error": {
+      "crai_eprofit": 0.9761,
+      "oraculo": 0.9761,
+      "regra_fixa": 1.0,
+      "sempre_ligacao": 0.8367
+    }
+  },
+  "ablacao_payday": {
+    "payday_lstm_prophet": {
+      "liquido": 1678436.88,
+      "taxa_recuperacao": 0.7992
+    },
+    "payday_heuristico": {
+      "liquido": 1509047.82,
+      "taxa_recuperacao": 0.7208
+    },
+    "ganho_do_modulo_3": 169389.06
+  }
+}
