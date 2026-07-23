@@ -162,12 +162,13 @@ Simulação, relatório e figuras em [`modulo_04_offer_bandit/`](modulo_04_offer
 
 ### 5. Agente LangGraph (`agent/` + `dunning/`)
 
-Orquestração multi-etapa com **raciocínio em loop (ReAct)**:
-- Avalia situação com contexto ML + SHAP + anomaly score
-- Decide: automático | Pix/Boleto | escalar humano
-- Gera conteúdo personalizado via LLM
-- Integração com **Pix Automático** como fallback antes do boleto
-- Cada nó loga seu raciocínio em PT-BR
+Orquestração multi-etapa com **raciocínio (ReAct)** sobre o contexto acumulado:
+- Avalia a situação com contexto ML + SHAP + anomaly score + payday
+- Decide entre **retentativa automática** e **mensagem de pagamento** — sem
+  escalonamento humano: quando a retentativa não resolve (ou já falhou), o
+  sistema gera uma **mensagem personalizada via LLM**
+- Meio de pagamento com **Pix Automático como primeira opção, boleto no fallback**
+- Cada nó loga seu raciocínio em PT-BR (trilha de auditoria)
 
 ---
 
@@ -178,7 +179,7 @@ crai/
 ├── crai/
 │   ├── agent/                          # Agente de churn involuntário
 │   │   ├── main_agent.py               # Grafo LangGraph principal
-│   │   ├── workflow.py                 # Nós: diagnose → anomaly → payday → retry → dunning
+│   │   ├── workflow.py                 # Nós: diagnose → anomaly → payday → decide → retry/dunning
 │   │   └── state.py                    # Schema de estado (TypedDict)
 │   │
 │   ├── churn_voluntary/                # Pipeline de churn voluntário
@@ -347,7 +348,13 @@ O sistema só recomenda intervenção quando `e-Profit > 0`, ou seja, quando o r
   - [x] Comparação pareada: +R$199k vs epsilon-greedy, 87% de escolhas ótimas
   - [x] Persistência dos posteriores (aprendizado contínuo sobrevive a restarts)
   - [x] Integração ao agente voluntário com warm start e 5º braço (Pix/Boleto)
-- [ ] **Módulo 5** — LangGraph + LLM (agent/ + dunning/)
+- [x] **Módulo 5** — LangGraph + LLM (agent/ + dunning/)
+  - [x] Nó de decisão (ReAct) sobre contexto ML + SHAP + anomalia + payday
+  - [x] Decisão de 2 vias: retentativa automática | mensagem de pagamento
+  - [x] Sem escalonamento humano — mensagem personalizada via LLM (Claude)
+  - [x] Pix Automático como primeira opção, boleto no fallback
+  - [x] Trilha de raciocínio em PT-BR por decisão (auditoria)
+  - [x] Testes do grafo (7 casos de roteamento + dunning)
 - [ ] **Módulo 6** — Demo para banca (demo_reasoning.py)
 
 ---

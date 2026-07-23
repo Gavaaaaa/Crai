@@ -31,13 +31,18 @@ class AgentState(TypedDict):
     confidence:       Optional[float]
     profile_type:     Optional[str]
 
+    # Decisão de recuperação (Módulo 5 — raciocínio ReAct sobre contexto ML)
+    estrategia:   Optional[str]    # retry_automatico | mensagem_pagamento
+    raciocinio:   Optional[list]   # trilha de raciocínio em PT-BR (auditoria)
+
     # Retentativa (Backoff)
     retry_count:     int
     next_retry_at:   Optional[datetime]
     retry_exhausted: bool
     recovered:       bool
 
-    # Dunning (LangGraph + Claude)
-    dunning_sent: bool
-    channel:      Optional[str]
-    message_sent: Optional[str]
+    # Dunning (LangGraph + Claude) — mensagem personalizada, sem escalonamento humano
+    dunning_sent:     bool
+    channel:          Optional[str]
+    metodo_pagamento: Optional[str]   # pix_automatico | boleto (Pix Automático como fallback antes do boleto)
+    message_sent:     Optional[str]
