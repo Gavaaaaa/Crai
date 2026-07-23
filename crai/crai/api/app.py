@@ -92,6 +92,8 @@ async def _run_involuntary_pipeline(event: dict):
     invoice = event.get("data", {}).get("object", {})
     customer_id = invoice.get("customer", "cus_unknown")
     amount = invoice.get("amount_due", 0) / 100
+    # attempt_count do Stripe conta a cobranca original; retentativas ja feitas = count - 1
+    retries_done = max(0, invoice.get("attempt_count", 1) - 1)
 
     initial: AgentState = {
         "stripe_event": event, "customer_id": customer_id,
@@ -101,7 +103,7 @@ async def _run_involuntary_pipeline(event: dict):
         "shap_explanation": None, "feature_importance": None,
         "is_anomalous": None, "reconstruction_error": None, "anomaly_explanation": None,
         "optimal_retry_at": None,
-        "confidence": None, "profile_type": None, "retry_count": 0, "next_retry_at": None,
+        "confidence": None, "profile_type": None, "retry_count": retries_done, "next_retry_at": None,
         "retry_exhausted": False, "recovered": False, "dunning_sent": False,
         "channel": None, "message_sent": None,
     }

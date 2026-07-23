@@ -12,11 +12,15 @@ class BackoffConfig:
     jitter_minutes: int
 
 
+# Chaves = códigos de erro do Stripe (mesmo vocabulário de AgentState.failure_cause).
+# max_attempts = 0 marca causa não-retentável: retentar não resolve, vai direto ao dunning.
 BACKOFF_RULES = {
     "insufficient_funds": BackoffConfig(1.0, 4, 10),
-    "technical_error":    BackoffConfig(0.083, 3, 5),
-    "security_block":     BackoffConfig(2.0, 2, 20),
-    "card_expired":       BackoffConfig(0.0, 1, 0),
+    "processing_error":   BackoffConfig(0.083, 3, 5),
+    "do_not_honor":       BackoffConfig(2.0, 2, 20),
+    "card_declined":      BackoffConfig(2.0, 2, 20),
+    "generic_decline":    BackoffConfig(2.0, 2, 20),
+    "expired_card":       BackoffConfig(0.0, 0, 0),
 }
 
 

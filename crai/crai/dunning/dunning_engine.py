@@ -6,11 +6,14 @@ from typing import TypedDict
 
 claude = AsyncAnthropic()
 
+# Chaves = códigos de erro do Stripe (mesmo vocabulário de AgentState.failure_cause).
 FALLBACK_TEMPLATES = {
-    "card_expired":       "Olá! Seu cartão expirou e não conseguimos cobrar R$ {amount:.2f}. Atualize em: {link}",
+    "expired_card":       "Olá! Seu cartão expirou e não conseguimos cobrar R$ {amount:.2f}. Atualize em: {link}",
     "insufficient_funds": "Oi! Tivemos dificuldade ao cobrar R$ {amount:.2f}. Acesse para regularizar: {link}",
-    "security_block":     "Olá! Seu banco bloqueou uma cobrança de R$ {amount:.2f}. Acesse: {link}",
-    "technical_error":    "Olá! Houve uma falha técnica no pagamento de R$ {amount:.2f}. Detalhes: {link}",
+    "do_not_honor":       "Olá! Seu banco bloqueou uma cobrança de R$ {amount:.2f}. Acesse: {link}",
+    "card_declined":      "Olá! Seu banco recusou a cobrança de R$ {amount:.2f}. Acesse: {link}",
+    "generic_decline":    "Olá! Seu banco recusou a cobrança de R$ {amount:.2f}. Acesse: {link}",
+    "processing_error":   "Olá! Houve uma falha técnica no pagamento de R$ {amount:.2f}. Detalhes: {link}",
 }
 
 
@@ -65,7 +68,7 @@ Retorne APENAS a mensagem."""
             message = response.content[0].text.strip()
         except Exception as e:
             print(f"[DUNNING] Claude API indisponível ({e}) — usando fallback")
-            template = FALLBACK_TEMPLATES.get(state["failure_cause"], FALLBACK_TEMPLATES["technical_error"])
+            template = FALLBACK_TEMPLATES.get(state["failure_cause"], FALLBACK_TEMPLATES["processing_error"])
             message = template.format(amount=state["amount"], link=state["portal_link"])
         return {**state, "message": message}
 
