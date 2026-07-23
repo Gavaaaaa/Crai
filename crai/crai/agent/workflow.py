@@ -97,6 +97,66 @@ async def infer_payday(state: AgentState) -> AgentState:
             "profile_type": window["profile"]}
 
 
+# Causas em que retentar a cobrança pode, mecanicamente, resolver.
+# Cartão expirado / recusado / do_not_honor não passam por insistência —
+# o cliente precisa agir, então vão direto à mensagem personalizada.
+CAUSAS_RETENTAVEIS = {"insufficient_funds", "processing_error"}
+
+
+async def decide_recovery(state: AgentState) -> AgentState:
+    """Módulo 5 — nó de raciocínio (ReAct) que decide a estratégia de recuperação.
+
+    Avalia o contexto acumulado pelos Módulos 1-3 (score + e-Profit + SHAP +
+    anomalia + payday) e decide entre duas vias — nunca aciona um humano:
+
+        retry_automatico   : a causa é retentável; reagenda a cobrança na
+                             janela de liquidez prevista pelo Módulo 3.
+        mensagem_pagamento : contatar o cliente com uma mensagem personalizada
+                             (LLM) e um link de pagamento — Pix Automático como
+                             primeira opção, boleto como fallback.
+
+    Cada passo do raciocínio é logado em PT-BR para auditoria.
+    """
+    causa = state["failure_cause"]
+    score = state.get("recovery_score", 0)
+    eprofit = state.get("eprofit", 0.0)
+    anomala = state.get("is_anomalous", False)
+    ja_retentou = state.get("retry_count", 0) > 0
+    retentavel = causa in CAUSAS_RETENTAVEIS and not ja_retentou
+
+    raciocinio = [
+        f"Observação: causa={causa}, score={score}/100, "
+        f"e-Profit=R$ {eprofit:.2f}, anomalia={'sim' if anomala else 'não'}.",
+    ]
+
+    if retentavel:
+        quando = ("na janela de liquidez prevista (Módulo 3)"
+                  if causa == "insufficient_funds" else "imediatamente")
+        raciocinio.append(
+            f"Pensamento: '{causa}' costuma ser resolvido por nova tentativa de "
+            f"cobrança {quando} — insistir aqui tem retorno esperado positivo.")
+        raciocinio.append("Decisão: retry_automatico.")
+        estrategia = "retry_automatico"
+    else:
+        if causa not in CAUSAS_RETENTAVEIS:
+            motivo = (f"'{causa}' não se resolve por retentativa — o cliente "
+                      f"precisa agir (atualizar cartão ou pagar por outro meio)")
+        else:
+            motivo = "a retentativa automática já foi tentada e falhou"
+        urgencia = "alta" if (anomala or score < 40) else "normal"
+        raciocinio.append(
+            f"Pensamento: {motivo}. Contatar com mensagem personalizada; "
+            f"urgência {urgencia} pelo score/anomalia.")
+        raciocinio.append("Decisão: mensagem_pagamento (Pix Automático → boleto).")
+        estrategia = "mensagem_pagamento"
+
+    print(f"[AGENT] Estratégia (Módulo 5): {estrategia}")
+    for passo in raciocinio:
+        print(f"[RACIOCÍNIO] {passo}")
+
+    return {**state, "estrategia": estrategia, "raciocinio": raciocinio}
+
+
 async def schedule_retry(state: AgentState) -> AgentState:
     attempt = state.get("retry_count", 0)
     result = _backoff.get_schedule(state["failure_cause"], attempt, state.get("optimal_retry_at"))
@@ -109,10 +169,17 @@ async def schedule_retry(state: AgentState) -> AgentState:
 
 
 async def trigger_dunning(state: AgentState) -> AgentState:
+    """Executa a mensagem personalizada via LLM (LangGraph) — nunca aciona humano."""
     p_recovery = state.get("p_recovery", state.get("recovery_score", 50) / 100)
     result = await _dunning.run_campaign(state["customer_id"], state["failure_cause"],
                                           p_recovery, state["amount"])
-    return {**state, "dunning_sent": result["sent"], "channel": result["channel"], "message_sent": result["message"]}
+    return {
+        **state,
+        "dunning_sent": result["sent"],
+        "channel": result["channel"],
+        "metodo_pagamento": result["payment_method"],
+        "message_sent": result["message"],
+    }
 
 
 async def update_roi_dashboard(state: AgentState) -> AgentState:

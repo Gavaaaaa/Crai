@@ -50,9 +50,10 @@ async def run_involuntary_scenario(name, customer_id, amount, failure_code, atte
         "shap_explanation": None, "feature_importance": None,
         "is_anomalous": None, "reconstruction_error": None, "anomaly_explanation": None,
         "optimal_retry_at": None,
+        "estrategia": None, "raciocinio": None,
         "confidence": None, "profile_type": None, "retry_count": retries_done, "next_retry_at": None,
         "retry_exhausted": False, "recovered": False, "dunning_sent": False,
-        "channel": None, "message_sent": None,
+        "channel": None, "metodo_pagamento": None, "message_sent": None,
     }
     config = {"configurable": {"thread_id": customer_id}}
     return await crai_agent.ainvoke(initial, config)
