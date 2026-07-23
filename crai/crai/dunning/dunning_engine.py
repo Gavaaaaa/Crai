@@ -47,8 +47,10 @@ class DunningEngine:
         return g.compile()
 
     async def _select_channel(self, state):
+        # O canal ja vem decidido pela politica do Modulo 5; whatsapp e o
+        # default para chamadas legadas que nao informam um.
         portal = f"https://pay.crai.ai/{state['customer_id'][:8]}"
-        return {**state, "channel": "whatsapp", "portal_link": portal}
+        return {**state, "channel": state.get("channel") or "whatsapp", "portal_link": portal}
 
     async def _define_tone(self, state):
         score = state["recovery_score"]
@@ -76,10 +78,11 @@ Retorne APENAS a mensagem."""
         print(f"[DUNNING] {state['channel'].upper()} → {state['customer_id']}: {state['message'][:90]}")
         return {**state, "sent": True}
 
-    async def run_campaign(self, customer_id, failure_cause, recovery_score, amount) -> dict:
+    async def run_campaign(self, customer_id, failure_cause, recovery_score, amount,
+                           canal: str = "whatsapp") -> dict:
         initial = DunningState(
             customer_id=customer_id, failure_cause=failure_cause, recovery_score=recovery_score,
-            amount=amount, channel="email", tone="", message="", sent=False, portal_link="",
+            amount=amount, channel=canal, tone="", message="", sent=False, portal_link="",
         )
         result = await self.graph.ainvoke(initial)
         return {"sent": result["sent"], "channel": result["channel"], "message": result["message"]}
