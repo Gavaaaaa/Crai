@@ -160,34 +160,13 @@ Pipeline de treino e relatório em [`modulo_03_payday/`](modulo_03_payday/). Mé
 
 Simulação, relatório e figuras em [`modulo_04_offer_bandit/`](modulo_04_offer_bandit/). Em 6.000 rodadas: **+R$199 mil** vs o epsilon-greedy anterior, regret 40% menor, 87% de escolhas ótimas ao final.
 
-### 5. Decision Policy (`agent/decision_policy.py`)
+### 5. Agente LangGraph (`agent/` + `dunning/`)
 
-Política de decisão orientada a **e-Profit** que substitui a regra fixa de
-retentativas. A cada cobrança falha decide entre: retentar, e-mail, WhatsApp,
-link Pix/boleto, escalar para o time de CS, ou **não intervir**.
-
-O ponto central é uma assimetria que a regra fixa ignora: **retentar não
-resolve todas as causas**. Um cartão expirado nunca passa numa retentativa —
-só o cliente pode atualizá-lo. Saldo insuficiente só passa depois que o
-dinheiro entra. Erro técnico se resolve na hora.
-
-- `e-Profit(ação) = P(recuperar | ação) × valor da fatura − custo(ação)`
-- O time de CS é recurso **escasso** (10% do volume): só escala quando o
-  ganho marginal sobre o melhor canal automático supera R$ 200
-- Cada decisão registra o raciocínio em PT-BR para auditoria
-
-Simulação, relatório e figuras em [`modulo_05_decision_policy/`](modulo_05_decision_policy/).
-Em 5.000 cobranças: **+R$ 648 mil** (+62,9%) vs a regra fixa de mercado,
-atingindo **98% do teto do oráculo** — com 1,78 ações por cobrança contra
-3,11 da regra fixa. A ablação isola **R$ 169 mil** desse ganho como
-contribuição do Módulo 3 (payday).
-
-### 6. Agente LangGraph (`agent/` + `dunning/`)
-
-Orquestração multi-etapa:
+Orquestração multi-etapa com **raciocínio em loop (ReAct)**:
 - Avalia situação com contexto ML + SHAP + anomaly score
-- Roteamento condicional de 3 vias a partir da decisão do Módulo 5
-- Gera conteúdo personalizado via LLM, no canal escolhido pela política
+- Decide: automático | Pix/Boleto | escalar humano
+- Gera conteúdo personalizado via LLM
+- Integração com **Pix Automático** como fallback antes do boleto
 - Cada nó loga seu raciocínio em PT-BR
 
 ---
@@ -199,8 +178,7 @@ crai/
 ├── crai/
 │   ├── agent/                          # Agente de churn involuntário
 │   │   ├── main_agent.py               # Grafo LangGraph principal
-│   │   ├── workflow.py                 # Nós: diagnose → anomaly → payday → decide → retry/dunning
-│   │   ├── decision_policy.py          # Política de decisão orientada a e-Profit
+│   │   ├── workflow.py                 # Nós: diagnose → anomaly → payday → retry → dunning
 │   │   └── state.py                    # Schema de estado (TypedDict)
 │   │
 │   ├── churn_voluntary/                # Pipeline de churn voluntário
@@ -369,14 +347,7 @@ O sistema só recomenda intervenção quando `e-Profit > 0`, ou seja, quando o r
   - [x] Comparação pareada: +R$199k vs epsilon-greedy, 87% de escolhas ótimas
   - [x] Persistência dos posteriores (aprendizado contínuo sobrevive a restarts)
   - [x] Integração ao agente voluntário com warm start e 5º braço (Pix/Boleto)
-- [x] **Módulo 5** — Política de decisão orientada a e-Profit (decision_policy.py)
-  - [x] Ambiente de cobrança simulado com verdade oculta (causa, liquidez, resposta)
-  - [x] Baseline: a regra fixa de mercado (retry em D+1/D+3/D+5 + e-mail)
-  - [x] Decisão de 3 vias no grafo: retry | contatar cliente | não intervir
-  - [x] Racionamento do time de CS por ganho marginal (limiar R$ 200)
-  - [x] +R$ 648k vs regra fixa (+62,9%), 98% do teto do oráculo
-  - [x] Ablação isolando a contribuição do Módulo 3 (R$ 169k, 26% do ganho)
-  - [x] Log de raciocínio em PT-BR por decisão
+- [ ] **Módulo 5** — LangGraph + LLM (agent/ + dunning/)
 - [ ] **Módulo 6** — Demo para banca (demo_reasoning.py)
 
 ---

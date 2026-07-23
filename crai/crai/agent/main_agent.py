@@ -4,7 +4,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from .state import AgentState
 from .workflow import (
-    diagnose_failure, check_anomaly, infer_payday, decide_action,
+    diagnose_failure, check_anomaly, infer_payday,
     schedule_retry, trigger_dunning, update_roi_dashboard,
 )
 
@@ -24,19 +24,6 @@ def route_after_diagnosis(state: AgentState) -> str:
     return "check_anomaly"
 
 
-def route_after_decision(state: AgentState) -> str:
-    """Modulo 5 — a decisao de 3 vias: automatico | contatar cliente | nao intervir."""
-    acao = state.get("acao_decidida")
-    if acao == "retry":
-        return "schedule_retry"
-    if acao == "nao_intervir":
-        print("[ROUTER] Politica decidiu nao intervir -- nenhum canal tem e-Profit positivo")
-        return "update_dashboard"
-    if state.get("escalar_humano"):
-        print(f"[ROUTER] Escalando para o time de CS (e-Profit R$ {state.get('acao_eprofit', 0):.2f})")
-    return "trigger_dunning"
-
-
 def route_after_retry(state: AgentState) -> str:
     if state.get("retry_exhausted") and not state.get("recovered"):
         return "trigger_dunning"
@@ -48,7 +35,6 @@ def build_crai_graph() -> StateGraph:
     graph.add_node("diagnose", diagnose_failure)
     graph.add_node("check_anomaly", check_anomaly)
     graph.add_node("infer_payday", infer_payday)
-    graph.add_node("decide_action", decide_action)
     graph.add_node("schedule_retry", schedule_retry)
     graph.add_node("trigger_dunning", trigger_dunning)
     graph.add_node("update_dashboard", update_roi_dashboard)
@@ -58,12 +44,7 @@ def build_crai_graph() -> StateGraph:
         "check_anomaly": "check_anomaly", "update_dashboard": "update_dashboard",
     })
     graph.add_edge("check_anomaly", "infer_payday")
-    graph.add_edge("infer_payday", "decide_action")
-    graph.add_conditional_edges("decide_action", route_after_decision, {
-        "schedule_retry": "schedule_retry",
-        "trigger_dunning": "trigger_dunning",
-        "update_dashboard": "update_dashboard",
-    })
+    graph.add_edge("infer_payday", "schedule_retry")
     graph.add_conditional_edges("schedule_retry", route_after_retry, {
         "trigger_dunning": "trigger_dunning", "update_dashboard": "update_dashboard",
     })

@@ -1,8 +1,0 @@
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-.pytest_cache/
-
-# Trajetoria da simulacao (regeneravel via src.simulate) — mesmo criterio do Modulo 4
-reports/simulacao.csv

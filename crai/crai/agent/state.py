@@ -31,12 +31,6 @@ class AgentState(TypedDict):
     confidence:       Optional[float]
     profile_type:     Optional[str]
 
-    # Decisao de acao (Modulo 5 — politica orientada a e-Profit)
-    acao_decidida:   Optional[str]    # retry | email | whatsapp | pix_boleto | ligacao_cs | nao_intervir
-    acao_motivo:     Optional[str]    # raciocinio em PT-BR para auditoria
-    acao_eprofit:    Optional[float]
-    escalar_humano:  bool
-
     # Retentativa (Backoff)
     retry_count:     int
     next_retry_at:   Optional[datetime]

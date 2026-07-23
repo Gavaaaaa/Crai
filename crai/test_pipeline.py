@@ -50,8 +50,6 @@ async def run_involuntary_scenario(name, customer_id, amount, failure_code, atte
         "shap_explanation": None, "feature_importance": None,
         "is_anomalous": None, "reconstruction_error": None, "anomaly_explanation": None,
         "optimal_retry_at": None,
-        "acao_decidida": None, "acao_motivo": None, "acao_eprofit": None,
-        "escalar_humano": False,
         "confidence": None, "profile_type": None, "retry_count": retries_done, "next_retry_at": None,
         "retry_exhausted": False, "recovered": False, "dunning_sent": False,
         "channel": None, "message_sent": None,
